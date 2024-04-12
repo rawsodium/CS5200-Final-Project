@@ -1,0 +1,6 @@
+name, grad_only, student_population
+"Boston", false, 19940
+"Oakland", false, 713
+"Portland", true, 400
+"Toronto", true, 1400
+"London", false, 500

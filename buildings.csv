@@ -1,0 +1,29 @@
+name, street_number, street_name, city, zipcode, num_floors, campus
+// 10 buildings at Boston
+"Richards Hall", 360, "Huntington Ave", "Boston", 02115, 4, "Boston"
+"Ell Hall", 360, "Huntington Ave", "Boston", 02115, 4, "Boston"
+"Hayden Hall", 360, "Huntington Ave", "Boston", 02115, 4, "Boston"
+"Churchill Hall", 380, "Huntington Ave", "Boston", 02115, 5, "Boston"
+"Forsyth Hall", 70, "Forsyth St", "Boston", 02115, 2, "Boston"
+"Snell Engineering", 110, "Forsyth St", "Boston", 02115, 4, "Boston"
+"Snell Library", 360, "Huntington Ave", "Boston", 02115, 4, "Boston"
+"Shillman Hall", 115, "Forsyth St", "Boston", 02115, 4, "Boston"
+"West Village H", 440, "Huntington Ave", "Boston", 02115, 17, "Boston"
+"West Village G", 450, "Parker St", "Boston", 02115, 7, "Boston"
+// 10 buildings at Oakland
+"Mills Hall", 5000, "MacArthur Blvd", "Oakland", 94613, 4, "Oakland"
+"Rothwell Center", 100, "Post Rd", "Oakland", 94613, 2, "Oakland"
+"Stern Hall", 50, "Kapiolani Rd", "Oakland", 94613, 4, "Oakland"
+"Carnegie Hall", 100, "Wetmore Rd", "Oakland", 94613, 3, "Oakland"
+"F.W. Olin Library", 70, "Richards Rd", "Oakland", 94613, 4, "Oakland"
+"Lisser Hall", 60, "Kapiolani Rd", "Oakland", 94613, 4, "Oakland"
+"Lokey School", 75, "Kapiolani Rd", "Oakland", 94613, 3, "Oakland"
+"Sage Hall", 110, "Wetmore Rd", "Oakland", 94613, 2, "Oakland"
+"Cowell", 55, "Kapiolani Rd", "Oakland", 94613, 2, "Oakland"
+"Moore Natural Sciences Building", 120, "Wetmore Rd", "Oakland", 94613, 4, "Oakland"
+// 1 building in Portland
+"Roux Institute", 100, "Fore St", "Portland", 04101, 5, "Portland"
+// 1 building in Toronto
+"First Canadian Place", 100, "King St W", "Toronto", 00000, 72, "Toronto"
+// 1 building in London
+"Devon House", 58, "St Katharine's Way", "London", 99999, 6, "London"
