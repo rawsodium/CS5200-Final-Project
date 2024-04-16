@@ -4,7 +4,7 @@ USE final_project;
 -- TABLES
 CREATE TABLE IF NOT EXISTS campuses(
 	name VARCHAR(64) PRIMARY KEY,
-    grad_only TINYINT,
+    grad_only boolean,
     student_population int);
     
 CREATE TABLE IF NOT EXISTS buildings(
@@ -70,28 +70,26 @@ CREATE TABLE IF NOT EXISTS bookings(
 
 -- starts empty
 CREATE TABLE IF NOT EXISTS signs_in(
-	nuid int NOT NULL,
-    booking_id int,
+	nuid int,
+    booking_id int UNIQUE,
     FOREIGN KEY (nuid) REFERENCES students(nuid),
     FOREIGN KEY (booking_id) REFERENCES bookings(booking_id),
-    PRIMARY KEY (booking_id));
+    PRIMARY KEY (nuid, booking_id));
     
     
 -- DATABASE PROCEDURES AND FUNCTIONS
 
 -- validate_student: Given a user's NUID, Check if their NUID is in the Students table
 -- usage: we check if there is at least one row returned from this procedure on the frontend
-DROP PROCEDURE IF EXISTS validate_student;
 DELIMITER $$
 CREATE PROCEDURE validate_student(nuid INT)
 BEGIN
 	SELECT * FROM students
-        WHERE students.nuid = nuid;
+    WHERE students.nuid = nuid;
 END$$
 DELIMITER ;
 
 -- get_user_bookings: Given a user's NUID, return all bookings associated with them
-DROP PROCEDURE IF EXISTS get_user_bookings;
 DELIMITER $$
 CREATE PROCEDURE get_user_bookings(nuid INT)
 BEGIN
@@ -142,23 +140,22 @@ END $$
 DELIMITER ;
 
 -- does_booking_exist: Checks if a booking has been made on a certain day and time for a given room
--- usage: returns TRUE if a booking for the room (name and number) for a given data and time exists, FALSE otherwise
-DROP FUNCTION IF EXISTS does_booking_exist;
 DELIMITER $$
-CREATE FUNCTION does_booking_exist(day DATE, time INT, building_name VARCHAR(64), room_number INT)
-    RETURNS BOOL DETERMINISTIC
-    READS SQL DATA
+CREATE FUNCTION does_booking_exist(b_day DATE, b_time INT)
+	RETURNS BOOL DETERMINISTIC
+    CONTAINS SQL
     BEGIN
-        DECLARE num_rows INT;
-        SELECT COUNT(*) INTO num_rows FROM bookings
-            WHERE (date = day AND start_hour = time AND building_name = building_name AND room_number = room_number);
-        RETURN num_rows > 0;
+    DECLARE num_rows INT;
+    SELECT COUNT(*) INTO num_rows FROM bookings WHERE (date = b_day AND start_hour = b_time);
+    
+    -- i have zero idea if this syntax is correct until we start testing, thanks MySQL :)
+    RETURN num_rows > 0;
     END $$
 DELIMITER ;
 
 -- find_room_with_criteria: Given criteria (capacity, ADA compliant, start time, date, projector, and club association), finds all
 -- rooms that satisfy the user's wants
-DROP PROCEDURE IF EXISTS find_room_with_criteria;
+-- TODO: this one is not finished
 DELIMITER $$
 CREATE PROCEDURE find_room_with_criteria(cap INT, p_ada BOOL, time INT, day DATE, p_projector BOOL, club BOOL, p_campus VARCHAR(64))
 BEGIN
@@ -179,31 +176,22 @@ END $$
 DELIMITER ;
 
 -- is_valid_club: Checks if the given club organization name is registered in the database, otherwise a user should not be able to book a room for a club that doesn't exist
--- usage: returns TRUE if the club is valid, FALSE otherwise
-DROP FUNCTION IF EXISTS is_valid_club;
+-- usage: check if this procedure returns a row
 DELIMITER $$
-CREATE FUNCTION is_valid_club(club_name VARCHAR(64))
-    RETURNS BOOL DETERMINISTIC
-    READS SQL DATA
-    BEGIN
-        DECLARE num_rows INT;
-        SELECT COUNT(*) INTO num_rows FROM organizations WHERE name = club_name;
-        RETURN num_rows > 0;
-    END $$
+CREATE PROCEDURE is_valid_club(club_name VARCHAR(64))
+BEGIN
+	SELECT * FROM organization WHERE name = club_name;
+END $$
 DELIMITER ;
 
 -- is_officer_of_club: Checks if the given student is a club officer for the club they want to book a room for
 -- usage: returns TRUE if the student is an officer, FALSE otherwise
 DROP FUNCTION IF EXISTS is_officer_of_club;
 DELIMITER $$
-CREATE FUNCTION is_officer_of_club(user_nuid INT, club_name VARCHAR(64))
-    RETURNS BOOL DETERMINISTIC
-    READS SQL DATA
-    BEGIN
-        DECLARE num_rows INT;
-        SELECT COUNT(*) INTO num_rows FROM club_officer WHERE (nuid = user_nuid AND organization_name = club_name);
-        RETURN num_rows > 0;
-    END $$
+CREATE PROCEDURE is_officer_of_club(user_nuid INT, club_name VARCHAR(64))
+BEGIN
+	SELECT * FROM club_officer WHERE (nuid = user_nuid AND organization_name = club_name);
+END $$
 DELIMITER ;
 
 -- create_booking: Add a new row in the bookings table
@@ -238,16 +226,12 @@ DROP PROCEDURE IF EXISTS delete_booking;
 DELIMITER $$
 CREATE PROCEDURE delete_booking(booking_num INT)
 BEGIN
-	-- delete from the bookings table if not in signs_in
-    DELETE FROM bookings
-        WHERE booking_id = booking_num
-        AND booking_num NOT IN (SELECT booking_id FROM signs_in);
+	
 END $$
 DELIMITER ;
 
 -- validate_booking_num: Checks if the booking number exists for the given user
--- usage: check if it returns a row on the frontend
-DROP PROCEDURE IF EXISTS validate_booking_num;
+-- usage: we check if there is at least one row returned from this procedure on the frontend
 DELIMITER $$
 CREATE PROCEDURE validate_booking_num(booking_num INT)
 BEGIN
@@ -256,7 +240,6 @@ END $$
 DELIMITER ;
 
 -- check_into_room: Inserts a tuple into the signs_in table, signaling that a booking has been signed into
-DROP PROCEDURE IF EXISTS check_into_room;
 DELIMITER $$
 CREATE PROCEDURE check_into_room(booking_num INT, user_nuid INT)
 BEGIN
