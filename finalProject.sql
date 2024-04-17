@@ -172,11 +172,15 @@ DELIMITER ;
 -- rooms that satisfy the user's wants
 DROP PROCEDURE IF EXISTS find_room_with_criteria;
 DELIMITER $$
-CREATE PROCEDURE find_room_with_criteria(cap INT, ada BOOL, time INT, day DATE, projector BOOL, club BOOL)
+CREATE PROCEDURE find_room_with_criteria(cap INT, ada BOOL, time INT, day DATE, projector BOOL, club BOOL, campus VARCHAR(64))
 BEGIN
-	-- first, get compliant rooms
+	-- first, get compliant rooms, including campus
 	SELECT * FROM rooms AS compliant_rooms
-        WHERE (capacity = cap AND rooms.ada = ada AND rooms.projector = projector AND club_association = club); 
+        WHERE capacity >= cap 
+            AND ada = ada 
+                AND projector = projector 
+                    AND club_only = club 
+                        AND building IN (SELECT name FROM buildings WHERE campus = campus); 
 	
     -- then, get compliant timeslots
     SELECT * FROM timeslots AS compliant_timeslots
