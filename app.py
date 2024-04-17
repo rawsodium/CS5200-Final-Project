@@ -11,9 +11,31 @@ import pymysql
 # variables for state management
 nuid = -1
 global_flag = True
-
+connected_to_db = False
 
 # CRUD functions, and various other helper functions
+
+# Initialize a database connection
+def initialize_db_connection(username: str, password: str) -> any:
+    try:
+        cxn = pymysql.connect(host='localhost', 
+                            user=username,
+                            password=password,
+                            database='final_project',
+                            charset='utf8mb4',
+                            cursorclass=pymysql.cursors.DictCursor)
+        print('Successfully connected to MySQL!\n')
+        return cxn
+    except pymysql.err.OperationalError as e:
+        print('Error: %d: %s' % (e.args[0], e.args[1]))
+        return None
+
+# Utility function to check that an UPDATE, INSERT or DELETE operation was successful
+# Returns True if the procedure update the rows needed, False otherwise
+def check_rows_affected(cur) -> bool:
+    affected_rows = cur.rowcount
+    return affected_rows > 0
+
 
 # Convert yes/no responses to boolean values
 def yn_to_bool(choice: str) -> bool:
@@ -22,126 +44,180 @@ def yn_to_bool(choice: str) -> bool:
 
 # Validate a user's entered NUID
 # Returns True if the user's NUID is in the data, False otherwise
-def validate_nuid(cxn, nuid) -> bool:
-    # create cursor
-    cur = cxn.cursor()
-    # call DB procedure validate_student
-    cur.callproc('validate_student', [nuid])
-    res_rows = cur.fetchall()
+def validate_nuid(cxn, nuid: int) -> bool:
+    res_rows = []
+    try:
+        # create cursor
+        cur = cxn.cursor()
+        # call DB procedure validate_student
+        cur.callproc('validate_student', [nuid])
+        res_rows = cur.fetchall()
+    except pymysql.err.OperationalError as e:
+        print('Error: %d: %s' % (e.args[0], e.args[1]))
     # If we return no rows, student doesn't exist
-    return res_rows == None
+    return len(res_rows) > 0
 
 
 # Validates a user's entered booking number
 # Returns True if the booking exists for the given student, False otherwise
-def validate_booking_num(cxn, booking_num) -> bool:
-    # create cursor
-    cur = cxn.cursor()
-    # call DB procedure to check if booking num in user's list of bookings
-    cur.callproc('validate_booking_num', [booking_num, nuid])
-    validated_rows = cur.fetchall()
-    cur.close()
+def validate_booking_num(cxn, booking_num: int) -> bool:
+    validated_rows = []
+    try:
+        # create cursor
+        cur = cxn.cursor()
+        # call DB procedure to check if booking num in user's list of bookings
+        cur.callproc('validate_booking_num', [booking_num, nuid])
+        validated_rows = cur.fetchall()
+        cur.close()
+    except pymysql.err.OperationalError as e:
+        print('Error: %d: %s' % (e.args[0], e.args[1]))
+
     # If we return no rows, exit the function and we'll handle the error in the main app loop
-    return validated_rows == None
+    return len(validated_rows) > 0
     
 
 # Returns a list of the bookings associated with their NUID that they signed in with
 def view_bookings(cxn) -> list:
-    # create cursor
-    cur = cxn.cursor()
-    # call DB procedure get_user_bookings
-    cur.callproc('get_user_bookings', [nuid])
-    returned_rows = cur.fetchall()
-    cur.close()
+    returned_rows = []
+    try:
+        # create cursor
+        cur = cxn.cursor()
+        # call DB procedure get_user_bookings
+        cur.callproc('get_user_bookings', [nuid])
+        returned_rows = cur.fetchall()
+        cur.close()
+    except pymysql.err.OperationalError as e:
+        print('Error: %d: %s' % (e.args[0], e.args[1]))
     return returned_rows
 
 
 # Updates a user's booking based on the criteria entered (either update date, time, or both)
 # Returns 0 upon success of operation, and -1 on error
-def update_booking(cxn, booking_num, date, timeslot) -> int:
-    # create cursor
-    cur = cxn.cursor()
-    # validate booking number, exit if error
-    if validate_booking_num(cxn, booking_num) is False:
+def update_booking(cxn, booking_num: int, date: str, timeslot: int) -> int:
+    try:
+        # create cursor
+        cur = cxn.cursor()
+        # validate booking number, exit if error
+        if validate_booking_num(cxn, booking_num) is False:
+            print("Error: Could not validate booking number %s\n" % (booking_num))
+            return -1
+        # Otherwise, the booking exists for the user, and we can proceed
+        # call DB procedure to update booking based on parameters
+        if date is None:
+            # we're only updating the timeslot, same date
+            cur.callproc('update_booking', [timeslot])
+
+            # we check affected row counts to make sure update worked
+            if check_rows_affected(cur):
+                cur.close()
+                return 0
+            else:
+                print("Error in updating the timeslot.\n")
+                return -1
+        elif timeslot is None:
+            # we're only updating the date, same timeslot
+            cur.callproc('update_booking', [date])
+            
+            if check_rows_affected(cur):
+                cur.close()
+                return 0
+            else:
+                print("Error in updating the date.\n")
+                return -1
+        else:
+            # we are updating both
+            cur.callproc('update_booking', [timeslot, date])
+
+            if check_rows_affected(cur):
+                cur.close()
+                return 0
+            else:
+                print("Error in updating either time/date of booking.\n")
+    except pymysql.err.OperationalError as e:
+        print('Error: %d: %s' % (e.args[0], e.args[1]))
         return -1
-    # Otherwise, the booking exists for the user, and we can proceed
-    # call DB procedure to update booking based on parameters
-    if date is None:
-        # we're only updating the timeslot, same date
-        cur.callproc('update_booking', [timeslot])
-        cur.close()
-        return 0
-    elif timeslot is None:
-        # we're only updating the date, same timeslot
-        cur.callproc('update_booking', [date])
-        cur.close()
-        return 0
-    else:
-        # we are updating both
-        cur.callproc('update_booking', [timeslot, date])
-        cur.close()
-        return 0
     
 
 # Returns a list of rooms that match a user's criteria (capacity, start time, date, projector, club association)
 def find_rooms_with_criteria(cxn, args: list) -> list:
-    # create cursor
-    cur = cxn.cursor()
-    # call DB procedure to find_rooms_with_criteria
-    cur.callproc('find_room_with_criteria', args)
-    returned_rows = cur.fetchall()
-    cur.close()
+    returned_rows = []
+    try:
+        # create cursor
+        cur = cxn.cursor()
+        # call DB procedure to find_rooms_with_criteria
+        cur.callproc('find_room_with_criteria', args)
+        returned_rows = cur.fetchall()
+        cur.close()
+    except pymysql.err.OperationalError as e:
+        print('Error: %d: %s' % (e.args[0], e.args[1]))
     return returned_rows
 
 
 # Creates a booking for the user
 # Returns 0 on success, or -1 on error
 def create_booking(cxn, args: list) -> int: 
-    # create cursor
-    cur = cxn.cursor()
-    # call DB procedure create_booking
-    cur.callproc('create_booking', args)
-    cur.close()
-    return 0
+    try:
+        # create cursor
+        cur = cxn.cursor()
+        # call DB procedure create_booking
+        cur.callproc('create_booking', args)
+
+        if check_rows_affected(cur):
+            cur.close()
+            return 0
+        else:
+            print("Error: Could not create booking.\n")
+            return -1
+    except pymysql.err.OperationalError as e:
+        print('Error: %d: %s' % (e.args[0], e.args[1]))
+        return -1
 
 
 # Deletes a booking for a user, provided it exists
 # Returns 0 on success, and -1 on error
-def delete_booking(cxn, booking_num) -> int:
-    # create cursor
-    cur = cxn.cursor()
-    # validate booking num first
-    if validate_booking_num(cxn, booking_num) is False:
+def delete_booking(cxn, booking_num: int) -> int:
+    try:
+        # create cursor
+        cur = cxn.cursor()
+        # validate booking num first
+        if validate_booking_num(cxn, booking_num) is False:
+            return -1
+        # call DB procedure delete_booking
+        cur.callproc('delete_booking', [booking_num])
+
+        if check_rows_affected(cur):
+            cur.close()
+            return 0
+        else:
+            print("Error: Could not delete booking.\n")
+            return -1
+    except pymysql.err.OperationalError as e:
+        print('Error: %d: %s' % (e.args[0], e.args[1]))
         return -1
-    # call DB procedure delete_booking
-    cur.callproc('delete_booking', [booking_num])
-    cur.close()
-    return 0
 
 
 # Signs a user into one of their bookings, letting them also specify room condition
 # Returns 0 on success, and -1 on error
-def sign_into_booking(cxn, booking_num) -> int:
-    # create cursor
-    cur = cxn.cursor()
-    # validate booking number first
-    if validate_booking_num(cxn, booking_num) is False:
-        return -1
-    
-    # If the user has already signed into the booking tell them that idk
-    #select_from_signs_in = 'SELECT * FROM signs_in WHERE booking_id = %d', booking_num
-    #cur.execute(select_from_signs_in)
-    res_rows = cur.fetchall()
+def sign_into_booking(cxn, booking_num: int) -> int:
+    try:
+        # create cursor
+        cur = cxn.cursor()
+        # validate booking number first
+        if validate_booking_num(cxn, booking_num) is False:
+            return -1
 
-    if res_rows is None:
-        return -1
-    cur.close()
+        # call DB procedure check_into_room
+        cur.callproc('check_into_room', [booking_num])
 
-    cur_two = cxn.cursor()
-    # call DB procedure check_into_room
-    cur_two.callproc('check_into_room', [booking_num])
-    cur_two.close()
-    return 0
+        if check_rows_affected(cur):
+            cur.close()
+            return 0
+        else:
+            print("Error: You've already signed into this booking!\n")
+            return -1
+    except pymysql.err.OperationalError as e:
+        print('Error: %d: %s' % (e.args[0], e.args[1]))
+        return -1
 
 
 # Sign out of the application (aka close DB connection)
@@ -172,24 +248,21 @@ def print_bookings(records: list) -> None:
 # Once operation finished, return to menu
 # If user selects sign out -> close DB connection
 
-# Prompt connection to DB
-username = input("Enter DB username: \n")
-password = input("Enter DB password: \n")
+while(not connected_to_db):
+    # Prompt connection to DB
+    username = input("Enter DB username: \n")
+    password = input("Enter DB password: \n")
+    
+    cxn = initialize_db_connection(username, password)
+
+    if cxn is None:
+        print("Could not connect, please re-enter your credentials.\n")
+    else:
+        connected_to_db = True
+        break
 
 # Connect to DB
 while(global_flag):
-    try:
-        cxn = pymysql.connect(host='localhost', 
-                            user=username,
-                            password=password,
-                            database='final_project',
-                            charset='utf8mb4',
-                            cursorclass=pymysql.cursors.DictCursor)
-        #validated_flag = True
-        print('Successfully connected to MySQL!\n')
-    except pymysql.err.OperationalError as e:
-        print('Error: %d: %s' % (e.args[0], e.args[1]))
-
     # prompt for NUID
     nuid = input("Please enter your NUID: \n")
 
