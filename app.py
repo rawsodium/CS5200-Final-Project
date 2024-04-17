@@ -11,24 +11,9 @@ import pymysql
 # variables for state management
 nuid = -1
 global_flag = True
-connected_to_db = False
+not_connected_to_db = True
 
 # CRUD functions, and various other helper functions
-
-# Initialize a database connection
-def initialize_db_connection(username: str, password: str) -> any:
-    try:
-        cxn = pymysql.connect(host='localhost', 
-                            user=username,
-                            password=password,
-                            database='final_project',
-                            charset='utf8mb4',
-                            cursorclass=pymysql.cursors.DictCursor)
-        print('Successfully connected to MySQL!\n')
-        return cxn
-    except pymysql.err.OperationalError as e:
-        print('Error: %d: %s' % (e.args[0], e.args[1]))
-        return None
 
 # Utility function to check that an UPDATE, INSERT or DELETE operation was successful
 # Returns True if the procedure update the rows needed, False otherwise
@@ -40,6 +25,46 @@ def check_rows_affected(cur) -> bool:
 # Convert yes/no responses to boolean values
 def yn_to_bool(choice: str) -> bool:
     return choice.lower() == 'yes'
+
+# Creates an entry in the student table
+# Returns 0 if the student was successfully added, -1 otherwise
+def create_user(cxn, nuid: int, name: str) -> int:
+    try:
+        # create cursor
+        cur = cxn.cursor()
+        # call DB procedure create_user
+        cur.callproc('create_user', [nuid, name])
+
+        # we check rows affected to make sure insert worked (or not)
+        if check_rows_affected(cur):
+            cur.close()
+            return 0
+        else:
+            print("Error in creating user.\n")
+            return -1
+    except pymysql.err.OperationalError as e:
+        print('Error: %d: %s' % (e.args[0], e.args[1]))
+        return -1
+
+
+# Add a club association 
+# Returns 0 if the student was successfully added, -1 otherwise
+def add_club_officer(cxn, nuid: int, club_name: str) -> int: 
+    try:
+        # create cursor
+        cur = cxn.cursor()
+        # call DB procedure add_club_officer
+        cur.callproc('add_club_officer', [nuid, club_name])
+
+        # we check rows affected
+        if check_rows_affected(cur):
+            cur.close()
+            return 0
+        else:
+            print("Error in updating club association.\n")
+    except pymysql.err.OperationalError as e:
+        print('Error: %d: %s' % (e.args[0], e.args[1]))
+        return -1
 
 
 # Validate a user's entered NUID
@@ -90,6 +115,20 @@ def view_bookings(cxn) -> list:
         print('Error: %d: %s' % (e.args[0], e.args[1]))
     return returned_rows
 
+# Returns a list of the other available days/timeslots for a given room, based on the booking number
+# originally provided by the user
+def display_other_bookings(cxn, booking_num: int) -> list:
+    returned_rows = []
+    try:
+        # create cursor
+        cur = cxn.cursor()
+        # call DB procedure display_other_times
+        cur.callproc('display_other_times', [booking_num])
+        returned_rows = cur.fetchall()
+        cur.close()
+    except pymysql.err.OperationalError as e:
+        print('Error: %d: %s' % (e.args[0], e.args[1]))
+    return returned_rows
 
 # Updates a user's booking based on the criteria entered (either update date, time, or both)
 # Returns 0 upon success of operation, and -1 on error
@@ -232,7 +271,8 @@ def print_menu() -> None:
     print("3: Create a booking\n")
     print("4: Delete a booking\n")
     print("5: Sign into a booking\n")
-    print("6: Sign out")
+    print("6: Add club association\n")
+    print("7: Sign out")
 
 # Given a list of bookings, prints them out for the user to see
 def print_bookings(records: list) -> None:
@@ -248,27 +288,51 @@ def print_bookings(records: list) -> None:
 # Once operation finished, return to menu
 # If user selects sign out -> close DB connection
 
-while(not connected_to_db):
-    # Prompt connection to DB
-    username = input("Enter DB username: \n")
-    password = input("Enter DB password: \n")
-    
-    cxn = initialize_db_connection(username, password)
+# Prompt connection to DB
+username = input("Enter DB username: \n")
+password = input("Enter DB password: \n")
 
-    if cxn is None:
-        print("Could not connect, please re-enter your credentials.\n")
-    else:
-        connected_to_db = True
+while(not_connected_to_db):
+    try:
+        cxn = pymysql.connect(host='localhost', 
+                            user=username,
+                            password=password,
+                            database='final_project',
+                            charset='utf8mb4',
+                            cursorclass=pymysql.cursors.DictCursor)
+        print('Successfully connected to MySQL!\n')
+        not_connected_to_db = False
         break
+    except pymysql.err.OperationalError as e:
+        print('Error: %d: %s' % (e.args[0], e.args[1]))
+        print("Credentials incorrect. Please try again.\n")
+        username = input("Enter username for DB connection: \n")
+        password = input("Enter password for DB connection: \n")
+        continue
+
 
 # Connect to DB
 while(global_flag):
-    # prompt for NUID
-    nuid = input("Please enter your NUID: \n")
+    # prompt user to either a) register or b) sign in
+    choice = input("Would you like to register an NUID (1), or sign in with an existing NUID (2)?\n")
 
-    if validate_nuid(cxn, nuid) is False:
-        print("Error: could not validate NUID %s.\n" % (nuid))
-        exit(1)
+    # register
+    if choice == '1':
+        user_nuid = input("Please enter your NUID:\n")
+        user_name = input("Please enter your full name:\n")
+
+        if create_user(cxn, int(user_nuid), user_name) == 0:
+            print("User was successfully added.\n")
+        else:
+            print("Error: could register.\n")
+            exit(1)
+    elif choice == '2':
+        # sign in, prompt for NUID
+        nuid = input("Please enter your NUID: \n")
+
+        if validate_nuid(cxn, nuid) is False:
+            print("Error: could not validate NUID %s.\n" % (nuid))
+            exit(1)
     
     # Successfully validated with NUID, so we can print menu
     print_menu()
@@ -287,6 +351,15 @@ while(global_flag):
 
         # Select booking number
         booking_num = input("Select booking number to update: \n")
+
+        # show user available timeslots for that room
+        if validate_booking_num(cxn, int(booking_num)) != 0:
+            print("Error: Could not validate booking num.\n")
+            break
+
+        # call display_other_times
+        other_available_slots = display_other_bookings(int(booking_num))
+        print_bookings(other_available_slots)
 
         # Get new day and time from user, could be None
         new_day = input("New day in YYYY-MM-DD format: \n")
@@ -365,10 +438,19 @@ while(global_flag):
         else:
             print("Error signing into booking %s.\n" % (b_num))
 
-    # quit/sign out
+    # add club association to user
     elif menu_item == '6':
+        # Ask user for club name
+        club_name = input("Enter club name to add to user:\n")
+
+        if add_club_officer(cxn, nuid, club_name) == 0:
+            print("Successfully added club affiliation!\n")
+        else:
+            print("Error: Could not add club association.\n")
+    # quit/sign out
+    elif menu_item == '7':
         # close db connection
-        sign_out()
+        sign_out(cxn)
         global_flag = False
     # default if wrong input?
     else:
