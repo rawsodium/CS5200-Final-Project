@@ -39,7 +39,7 @@ CREATE TABLE `bookings` (
   CONSTRAINT `bookings_ibfk_1` FOREIGN KEY (`nuid`) REFERENCES `students` (`nuid`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `bookings_ibfk_2` FOREIGN KEY (`organization_name`) REFERENCES `organizations` (`name`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `bookings_ibfk_3` FOREIGN KEY (`room_number`, `building_name`, `start_hour`) REFERENCES `timeslots` (`room_number`, `building_name`, `start_hour`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -48,6 +48,7 @@ CREATE TABLE `bookings` (
 
 LOCK TABLES `bookings` WRITE;
 /*!40000 ALTER TABLE `bookings` DISABLE KEYS */;
+INSERT INTO `bookings` VALUES (1,101,'Richards Hall',13,'2012-12-12',1,NULL);
 /*!40000 ALTER TABLE `bookings` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -413,7 +414,7 @@ BEGIN
         
 	-- get last booking_id inserted into table
     SELECT MAX(booking_id) FROM bookings INTO last_booking_id;
-        
+			
 	-- you would think that creating a new tuple would autoincrement the id, but who even knows - hence why i used the last inserted id as a reference point.
 	INSERT INTO bookings(nuid, room_number, building_name, start_hour, date, booking_id, organization_name)
 		VALUES(user_nuid, r_num, b_name, s_hour, day, last_booking_id + 1, org_name);
@@ -492,12 +493,12 @@ BEGIN
     SELECT room_number, building_name INTO room_num, building_name FROM bookings WHERE booking_id = booking_num;
     
     -- get all timeslots for the room that are not booked
-    SELECT * FROM timeslots AS available_timeslots
+    SELECT * FROM timeslots
         WHERE NOT EXISTS (SELECT * FROM bookings 
-                            WHERE bookings.room_number = available_timeslots.room_number 
-                                AND bookings.building_name = available_timeslots.building_name 
-                                    AND bookings.start_hour = available_timeslots.start_hour
-                                        AND bookings.date = available_timeslots.date);
+                            WHERE bookings.room_number = timeslots.room_number 
+                                AND bookings.building_name = timeslots.building_name 
+                                    AND bookings.start_hour = timeslots.start_hour
+                                        AND bookings.date = timeslots.date);
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -633,4 +634,4 @@ DELIMITER ;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2024-04-17 21:45:38
+-- Dump completed on 2024-04-17 22:27:06

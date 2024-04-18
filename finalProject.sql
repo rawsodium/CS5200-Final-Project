@@ -147,12 +147,12 @@ BEGIN
     SELECT room_number, building_name INTO room_num, building_name FROM bookings WHERE booking_id = booking_num;
     
     -- get all timeslots for the room that are not booked
-    SELECT * FROM timeslots AS available_timeslots
+    SELECT * FROM timeslots
         WHERE NOT EXISTS (SELECT * FROM bookings 
-                            WHERE bookings.room_number = available_timeslots.room_number 
-                                AND bookings.building_name = available_timeslots.building_name 
-                                    AND bookings.start_hour = available_timeslots.start_hour
-                                        AND bookings.date = available_timeslots.date);
+                            WHERE bookings.room_number = timeslots.room_number 
+                                AND bookings.building_name = timeslots.building_name 
+                                    AND bookings.start_hour = timeslots.start_hour
+                                        AND bookings.date = timeslots.date);
 END $$
 DELIMITER ;
 
@@ -236,7 +236,7 @@ BEGIN
         
 	-- get last booking_id inserted into table
     SELECT MAX(booking_id) FROM bookings INTO last_booking_id;
-        
+			
 	-- you would think that creating a new tuple would autoincrement the id, but who even knows - hence why i used the last inserted id as a reference point.
 	INSERT INTO bookings(nuid, room_number, building_name, start_hour, date, booking_id, organization_name)
 		VALUES(user_nuid, r_num, b_name, s_hour, day, last_booking_id + 1, org_name);
@@ -250,7 +250,7 @@ BEGIN
 END $$
 DELIMITER ;
 
--- CALL create_booking(1, 101, "Richards Hall", 13, "2012-12-12", NULL);
+CALL create_booking(1, 101, "Richards Hall", 13, "2012-12-12", NULL);
 -- SELECT * FROM bookings;
 
 -- delete_booking: Given a booking number, deletes it from the bookings table if it has not been signed into yet
