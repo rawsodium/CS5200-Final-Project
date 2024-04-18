@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS rooms(
     PRIMARY KEY (room_number, building));
 
 -- starts empty
+-- DROP TABLE students;
 CREATE TABLE IF NOT EXISTS students(
 	nuid int PRIMARY KEY,
     name VARCHAR(128));
@@ -40,16 +41,17 @@ CREATE TABLE IF NOT EXISTS organizations(
 	name VARCHAR(64) PRIMARY KEY,
     type VARCHAR(64));
 
+-- DROP TABLE timeslots;
 CREATE TABLE IF NOT EXISTS timeslots(
 	room_number int,
     building_name  VARCHAR(64),
     start_hour int,
-	FOREIGN KEY (room_number) REFERENCES rooms(room_number) ON DELETE CASCADE ON UPDATE CASCADE,
-    FOREIGN KEY (building_name) REFERENCES rooms(building) ON DELETE CASCADE ON UPDATE CASCADE,
+	FOREIGN KEY (room_number, building_name) REFERENCES rooms(room_number, building) ON DELETE CASCADE ON UPDATE CASCADE,
     PRIMARY KEY (room_number, building_name, start_hour),
     CONSTRAINT valid_hour CHECK (start_hour >= 0 AND start_hour < 24));
 
 -- Starts empty
+-- DROP TABLE club_officer;
 CREATE TABLE IF NOT EXISTS club_officer(
 	nuid int,
     organization_name VARCHAR(64),
@@ -57,7 +59,7 @@ CREATE TABLE IF NOT EXISTS club_officer(
     FOREIGN KEY (organization_name) REFERENCES organizations(name) ON DELETE CASCADE ON UPDATE CASCADE,
     PRIMARY KEY (nuid, organization_name));
     
--- DROP TABLE bookings;
+DROP TABLE bookings;
 -- Starts empty
 CREATE TABLE IF NOT EXISTS bookings(
 	nuid int,
@@ -280,9 +282,6 @@ DROP PROCEDURE IF EXISTS check_into_room;
 DELIMITER $$
 CREATE PROCEDURE check_into_room(booking_num INT, user_nuid INT)
 BEGIN
-	INSERT INTO signs_in(nuid, booking_id)
-		VALUES(user_nuid, booking_num);
-        
 	IF booking_num IN (SELECT * FROM signs_in) THEN
 		SELECT 'Row was not inserted - booking already checked into.'
 			AS message;
@@ -290,6 +289,8 @@ BEGIN
 	ELSE
 		SELECT '1 row was inserted';
 	END IF;
+    INSERT INTO signs_in(nuid, booking_id)
+		VALUES(user_nuid, booking_num);
 END $$
 DELIMITER ;
 
