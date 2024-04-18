@@ -130,6 +130,7 @@ CREATE TABLE `club_officer` (
 
 LOCK TABLES `club_officer` WRITE;
 /*!40000 ALTER TABLE `club_officer` DISABLE KEYS */;
+INSERT INTO `club_officer` VALUES (2188306,'Fencing');
 /*!40000 ALTER TABLE `club_officer` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -233,6 +234,7 @@ CREATE TABLE `students` (
 
 LOCK TABLES `students` WRITE;
 /*!40000 ALTER TABLE `students` DISABLE KEYS */;
+INSERT INTO `students` VALUES (2188306,'Timothy Bennett');
 /*!40000 ALTER TABLE `students` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -372,15 +374,19 @@ DELIMITER ;
 DELIMITER ;;
 CREATE DEFINER=`root`@`localhost` PROCEDURE `check_into_room`(booking_num INT, user_nuid INT)
 BEGIN
-	IF booking_num IN (SELECT * FROM signs_in) THEN
-		SELECT 'Row was not inserted - booking already checked into.'
-			AS message;
-		SIGNAL SQLSTATE '23000' SET MESSAGE_TEXT = 'Row not inserted - booking already checked into.';
-	ELSE
-		SELECT '1 row was inserted';
+-- 	IF booking_num IN (SELECT * FROM signs_in) THEN
+-- 		SELECT 'Row was not inserted - booking already checked into.'
+-- 			AS message;
+-- 		SIGNAL SQLSTATE '23000' SET MESSAGE_TEXT = 'Row not inserted - booking already checked into.';
+-- 	ELSE
+-- 		SELECT '1 row was inserted';
+-- 	END IF;
+--     INSERT INTO signs_in(nuid, booking_id)
+-- 		VALUES(user_nuid, booking_num);
+	IF NOT EXISTS (SELECT * FROM signs_in WHERE booking_id = booking_num) THEN
+		INSERT INTO signs_in(nuid, booking_id)
+			VALUES(user_nuid, booking_num);
 	END IF;
-    INSERT INTO signs_in(nuid, booking_id)
-		VALUES(user_nuid, booking_num);
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -409,7 +415,6 @@ BEGIN
 	-- get last booking_id inserted into table
     SELECT MAX(booking_id) FROM bookings INTO last_booking_id;
 			
-	-- you would think that creating a new tuple would autoincrement the id, but who even knows - hence why i used the last inserted id as a reference point.
 	INSERT INTO bookings(nuid, room_number, building_name, start_hour, date, booking_id, organization_name)
 		VALUES(user_nuid, r_num, b_name, s_hour, day, last_booking_id + 1, org_name);
 	IF duplicate_entry_for_key = TRUE THEN
@@ -491,8 +496,7 @@ BEGIN
         WHERE NOT EXISTS (SELECT * FROM bookings 
                             WHERE bookings.room_number = timeslots.room_number 
                                 AND bookings.building_name = timeslots.building_name 
-                                    AND bookings.start_hour = timeslots.start_hour
-                                        AND bookings.date = timeslots.date);
+                                    AND bookings.start_hour = timeslots.start_hour);
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -520,7 +524,10 @@ BEGIN
 							AND rooms.club_only = club
 								AND timeslots.start_hour = time
 									AND rooms.building IN (SELECT name FROM buildings WHERE buildings.campus = p_campus)
-										AND NOT does_booking_exist(day, time, rooms.building, rooms.room_number);
+										AND NOT EXISTS (SELECT * FROM bookings WHERE bookings.building_name = rooms.building 
+																AND bookings.room_number = rooms.room_number 
+																	AND bookings.date = day
+																		AND bookings.start_hour = time);
 END ;;
 DELIMITER ;
 /*!50003 SET sql_mode              = @saved_sql_mode */ ;
@@ -628,4 +635,4 @@ DELIMITER ;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2024-04-17 23:10:41
+-- Dump completed on 2024-04-18 14:15:05
