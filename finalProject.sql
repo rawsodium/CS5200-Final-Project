@@ -1,10 +1,6 @@
 CREATE DATABASE IF NOT EXISTS final_project;
 USE final_project;
 
--- TODOS: finish procedures/functions
---        make sure FKs have ON UPDATE and ON DELETE
---        make sure field and table constraints are correct
-
 -- TABLES
 CREATE TABLE IF NOT EXISTS campuses(
 	name VARCHAR(64) PRIMARY KEY,
@@ -32,7 +28,6 @@ CREATE TABLE IF NOT EXISTS rooms(
     PRIMARY KEY (room_number, building));
 
 -- starts empty
--- DROP TABLE students;
 CREATE TABLE IF NOT EXISTS students(
 	nuid int PRIMARY KEY,
     name VARCHAR(128));
@@ -41,7 +36,6 @@ CREATE TABLE IF NOT EXISTS organizations(
 	name VARCHAR(64) PRIMARY KEY,
     type VARCHAR(64));
 
--- DROP TABLE timeslots;
 CREATE TABLE IF NOT EXISTS timeslots(
 	room_number int,
     building_name  VARCHAR(64),
@@ -51,7 +45,6 @@ CREATE TABLE IF NOT EXISTS timeslots(
     CONSTRAINT valid_hour CHECK (start_hour >= 0 AND start_hour < 24));
 
 -- Starts empty
--- DROP TABLE club_officer;
 CREATE TABLE IF NOT EXISTS club_officer(
 	nuid int,
     organization_name VARCHAR(64),
@@ -59,7 +52,6 @@ CREATE TABLE IF NOT EXISTS club_officer(
     FOREIGN KEY (organization_name) REFERENCES organizations(name) ON DELETE CASCADE ON UPDATE CASCADE,
     PRIMARY KEY (nuid, organization_name));
     
-DROP TABLE bookings;
 -- Starts empty
 CREATE TABLE IF NOT EXISTS bookings(
 	nuid int,
@@ -77,7 +69,6 @@ CREATE TABLE IF NOT EXISTS bookings(
 			ON DELETE CASCADE ON UPDATE CASCADE);
 
 -- starts empty
--- DROP TABLE signs_in;
 CREATE TABLE IF NOT EXISTS signs_in(
 	nuid int NOT NULL,
     booking_id int,
@@ -109,13 +100,6 @@ END$$
 DELIMITER ;
 
 -- update_booking: Given a booking number, update the booking's date or time (or both!)
--- Will need to account for the cases in which a user tries to do one of the following:
--- 1) Update to an invalid time (not between 0 and 23)
--- 2) Update to an invalid time (held by another booking in the same room/same day, aka overwriting someone else's booking)
--- 3) Update to an invalid day (?)
--- Need to use the does_booking_exist function to check if a booking already exists for the given day and time
-
--- TODO: this still needs work I think
 DROP PROCEDURE IF EXISTS update_booking;
 DELIMITER $$
 CREATE PROCEDURE update_booking(booking_num INT, booking_date DATE, booking_time INT)
@@ -153,8 +137,7 @@ BEGIN
         WHERE NOT EXISTS (SELECT * FROM bookings 
                             WHERE bookings.room_number = timeslots.room_number 
                                 AND bookings.building_name = timeslots.building_name 
-                                    AND bookings.start_hour = timeslots.start_hour
-                                        AND bookings.date = timeslots.date);
+                                    AND bookings.start_hour = timeslots.start_hour);
 END $$
 DELIMITER ;
 
@@ -188,11 +171,13 @@ BEGIN
 							AND rooms.club_only = club
 								AND timeslots.start_hour = time
 									AND rooms.building IN (SELECT name FROM buildings WHERE buildings.campus = p_campus)
-										AND NOT does_booking_exist(day, time, rooms.building, rooms.room_number);
+										AND NOT EXISTS (SELECT * FROM bookings WHERE bookings.building_name = rooms.building 
+																AND bookings.room_number = rooms.room_number 
+																	AND bookings.date = day
+																		AND bookings.start_hour = time);
 END $$
 DELIMITER ;
 
--- CALL find_room_with_criteria(25, 1, 13, "2012-12-12", 1, 0, "Boston");
 -- is_valid_club: Checks if the given club organization name is registered in the database, otherwise a user should not be able to book a room for a club that doesn't exist
 -- usage: returns TRUE if the club is valid, FALSE otherwise
 DROP FUNCTION IF EXISTS is_valid_club;
@@ -208,7 +193,7 @@ CREATE FUNCTION is_valid_club(club_name VARCHAR(64))
 DELIMITER ;
 
 -- is_officer_of_club: Checks if the given student is a club officer for the club they want to book a room for
--- -- usage: returns TRUE if the student is an officer, FALSE otherwise
+-- usage: returns TRUE if the student is an officer, FALSE otherwise
 DROP FUNCTION IF EXISTS is_officer_of_club;
 DELIMITER $$
 CREATE FUNCTION is_officer_of_club(user_nuid INT, club_name VARCHAR(64))
@@ -222,9 +207,6 @@ CREATE FUNCTION is_officer_of_club(user_nuid INT, club_name VARCHAR(64))
 DELIMITER ;
 
 -- create_booking: Add a new row in the bookings table
--- TODO: update timeslots table to reflect availibility change...?
--- TODO: make sure club user enters is a valid club... -> using is_valid_club
--- TODO (?): make sure user is a club officer if they are trying to book for a club?? -> using is_officer_of_club
 DROP PROCEDURE IF EXISTS create_booking;
 DELIMITER $$
 CREATE PROCEDURE create_booking(user_nuid INT, r_num INT, b_name VARCHAR(64), s_hour INT, day DATE, org_name VARCHAR(64))
@@ -239,7 +221,6 @@ BEGIN
 	-- get last booking_id inserted into table
     SELECT MAX(booking_id) FROM bookings INTO last_booking_id;
 			
-	-- you would think that creating a new tuple would autoincrement the id, but who even knows - hence why i used the last inserted id as a reference point.
 	INSERT INTO bookings(nuid, room_number, building_name, start_hour, date, booking_id, organization_name)
 		VALUES(user_nuid, r_num, b_name, s_hour, day, last_booking_id + 1, org_name);
 	IF duplicate_entry_for_key = TRUE THEN
@@ -251,9 +232,6 @@ BEGIN
 	END IF;
 END $$
 DELIMITER ;
-
-CALL create_booking(1, 101, "Richards Hall", 13, "2012-12-12", NULL);
--- SELECT * FROM bookings;
 
 -- delete_booking: Given a booking number, deletes it from the bookings table if it has not been signed into yet
 DROP PROCEDURE IF EXISTS delete_booking;
@@ -282,15 +260,19 @@ DROP PROCEDURE IF EXISTS check_into_room;
 DELIMITER $$
 CREATE PROCEDURE check_into_room(booking_num INT, user_nuid INT)
 BEGIN
-	IF booking_num IN (SELECT * FROM signs_in) THEN
-		SELECT 'Row was not inserted - booking already checked into.'
-			AS message;
-		SIGNAL SQLSTATE '23000' SET MESSAGE_TEXT = 'Row not inserted - booking already checked into.';
-	ELSE
-		SELECT '1 row was inserted';
+-- 	IF booking_num IN (SELECT * FROM signs_in) THEN
+-- 		SELECT 'Row was not inserted - booking already checked into.'
+-- 			AS message;
+-- 		SIGNAL SQLSTATE '23000' SET MESSAGE_TEXT = 'Row not inserted - booking already checked into.';
+-- 	ELSE
+-- 		SELECT '1 row was inserted';
+-- 	END IF;
+--     INSERT INTO signs_in(nuid, booking_id)
+-- 		VALUES(user_nuid, booking_num);
+	IF NOT EXISTS (SELECT * FROM signs_in WHERE booking_id = booking_num) THEN
+		INSERT INTO signs_in(nuid, booking_id)
+			VALUES(user_nuid, booking_num);
 	END IF;
-    INSERT INTO signs_in(nuid, booking_id)
-		VALUES(user_nuid, booking_num);
 END $$
 DELIMITER ;
 
@@ -305,8 +287,7 @@ BEGIN
     END IF;
 END $$
 DELIMITER ;
--- CALL create_user("Tim", 1);
--- SELECT * FROM students;
+
 -- add_club_officer: given a user's nuid and a club name, add the user as an officer of the club
 -- we only want to add the user if they are not already an officer of the club
 DROP PROCEDURE IF EXISTS add_club_officer;
@@ -321,5 +302,3 @@ BEGIN
 	END IF;
 END $$
 DELIMITER ;
--- CALL add_club_officer(1, "Fencing");
--- SELECT * FROM club_officer;
