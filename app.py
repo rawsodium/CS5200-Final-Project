@@ -96,7 +96,8 @@ def validate_booking_num(cxn, booking_num: int) -> bool:
         # create cursor
         cur = cxn.cursor()
         # call DB procedure to check if booking num in user's list of bookings
-        cur.callproc('validate_booking_num', [booking_num, nuid])
+        cur.callproc('validate_booking_num', [booking_num])
+        cxn.commit()
         validated_rows = cur.fetchall()
         cur.close()
     except pymysql.err.OperationalError as e:
@@ -128,7 +129,7 @@ def display_other_bookings(cxn, booking_num: int) -> list:
         # create cursor
         cur = cxn.cursor()
         # call DB procedure display_other_times
-        cur.callproc('display_other_times', [booking_num])
+        cur.callproc('display_other_times', (booking_num))
         returned_rows = cur.fetchall()
         cur.close()
     except pymysql.err.OperationalError as e:
@@ -426,7 +427,11 @@ while(global_flag):
 
             room_num = input("Room number: \n")
             building_name = input("Building name: \n")
-            club_name = input("Club name: \n")
+            
+            if yn_to_bool(club_affiliation) is True:
+                club_name = input("Club name: \n")
+            else:
+                club_name = None
 
             # create list of args for create_booking DB procedure
             args_c = (int(nuid), int(room_num), building_name, int(start_hr), day, club_name)
