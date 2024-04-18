@@ -12,6 +12,7 @@ import pymysql
 nuid = -1
 global_flag = True
 not_connected_to_db = True
+validated_flag = False
 
 # CRUD functions, and various other helper functions
 
@@ -33,10 +34,12 @@ def create_user(cxn, nuid: int, name: str) -> int:
         # create cursor
         cur = cxn.cursor()
         # call DB procedure create_user
-        cur.callproc('create_user', [nuid, name])
+        cur.callproc('create_user', (name, nuid))
 
         # we check rows affected to make sure insert worked (or not)
         if check_rows_affected(cur):
+            # commit change
+            cxn.commit()
             cur.close()
             return 0
         else:
@@ -54,10 +57,12 @@ def add_club_officer(cxn, nuid: int, club_name: str) -> int:
         # create cursor
         cur = cxn.cursor()
         # call DB procedure add_club_officer
-        cur.callproc('add_club_officer', [nuid, club_name])
+        cur.callproc('add_club_officer', (nuid, club_name))
 
         # we check rows affected
         if check_rows_affected(cur):
+            # commit change
+            cxn.commit()
             cur.close()
             return 0
         else:
@@ -148,6 +153,8 @@ def update_booking(cxn, booking_num: int, date: str, timeslot: int) -> int:
 
             # we check affected row counts to make sure update worked
             if check_rows_affected(cur):
+                # commit change
+                cxn.commit()
                 cur.close()
                 return 0
             else:
@@ -158,6 +165,8 @@ def update_booking(cxn, booking_num: int, date: str, timeslot: int) -> int:
             cur.callproc('update_booking', [date])
             
             if check_rows_affected(cur):
+                # commit change
+                cxn.commit()
                 cur.close()
                 return 0
             else:
@@ -185,7 +194,8 @@ def find_rooms_with_criteria(cxn, args: list) -> list:
         cur = cxn.cursor()
         # call DB procedure to find_rooms_with_criteria
         cur.callproc('find_room_with_criteria', args)
-        returned_rows = cur.fetchall()
+        # For simplicity sake, we only return 10 rows, otherwise it clutters everything up
+        returned_rows = cur.fetchmany(size=10)
         cur.close()
     except pymysql.err.OperationalError as e:
         print('Error: %d: %s' % (e.args[0], e.args[1]))
@@ -202,6 +212,8 @@ def create_booking(cxn, args: list) -> int:
         cur.callproc('create_booking', args)
 
         if check_rows_affected(cur):
+            # commit change
+            cxn.commit()
             cur.close()
             return 0
         else:
@@ -225,6 +237,8 @@ def delete_booking(cxn, booking_num: int) -> int:
         cur.callproc('delete_booking', [booking_num])
 
         if check_rows_affected(cur):
+            # commit change
+            cxn.commit()
             cur.close()
             return 0
         else:
@@ -249,6 +263,8 @@ def sign_into_booking(cxn, booking_num: int) -> int:
         cur.callproc('check_into_room', [booking_num])
 
         if check_rows_affected(cur):
+            # commit change
+            cxn.commit()
             cur.close()
             return 0
         else:
@@ -313,28 +329,33 @@ while(not_connected_to_db):
 
 # Connect to DB
 while(global_flag):
-    # prompt user to either a) register or b) sign in
-    choice = input("Would you like to register an NUID (1), or sign in with an existing NUID (2)?\n")
+    while(not validated_flag):
+        # prompt user to either a) register or b) sign in
+        choice = input("Would you like to register an NUID (1), or sign in with an existing NUID (2)?\n")
 
-    # register
-    if choice == '1':
-        user_nuid = input("Please enter your NUID:\n")
-        user_name = input("Please enter your full name:\n")
+        # register
+        if choice == '1':
+            user_nuid = input("Please enter your NUID:\n")
+            user_name = input("Please enter your full name:\n")
 
-        if create_user(cxn, int(user_nuid), user_name) == 0:
-            print("User was successfully added.\n")
-        else:
-            print("Error: could register.\n")
-            exit(1)
-    elif choice == '2':
-        # sign in, prompt for NUID
-        nuid = input("Please enter your NUID: \n")
+            if create_user(cxn, int(user_nuid), user_name) == 0:
+                print("User was successfully added.\n")
+                validated_flag = True
+            else:
+                print("Error: could not register.\n")
+                exit(1)
+        elif choice == '2':
+            # sign in, prompt for NUID
+            nuid = input("Please enter your NUID: \n")
 
-        if validate_nuid(cxn, nuid) is False:
-            print("Error: could not validate NUID %s.\n" % (nuid))
-            exit(1)
+            if validate_nuid(cxn, nuid) is False:
+                print("Error: could not validate NUID %s.\n" % (nuid))
+                exit(1)
+            validated_flag = True
     
     # Successfully validated with NUID, so we can print menu
+    print("Signed in successfully.\n")
+    print("------------------------\n")
     print_menu()
     menu_item = input("Select the number of the operation you want to do: \n")
 
@@ -342,38 +363,44 @@ while(global_flag):
     if menu_item == '1':
         bookings = view_bookings(cxn)
         print_bookings(bookings)
+
     # Update booking
     elif menu_item == '2':
         # Show user their bookings
         print("Your bookings: \n")
         bookings = view_bookings(cxn)
-        print_bookings(bookings)
 
-        # Select booking number
-        booking_num = input("Select booking number to update: \n")
+        if len(bookings) != 0:
+            print_bookings(bookings)
 
-        # show user available timeslots for that room
-        if validate_booking_num(cxn, int(booking_num)) != 0:
-            print("Error: Could not validate booking num.\n")
-            break
+            # Select booking number
+            booking_num = input("Select booking number to update: \n")
 
-        # call display_other_times
-        other_available_slots = display_other_bookings(int(booking_num))
-        print_bookings(other_available_slots)
+            # show user available timeslots for that room
+            if validate_booking_num(cxn, int(booking_num)) != 0:
+                print("Error: Could not validate booking num.\n")
+                break
 
-        # Get new day and time from user, could be None
-        new_day = input("New day in YYYY-MM-DD format: \n")
-        new_time = input("New start hour of booking, from 0 - 23: \n")
+            # call display_other_times
+            other_available_slots = display_other_bookings(int(booking_num))
+            print_bookings(other_available_slots)
 
-        # Update booking based on inputs
-        if update_booking(cxn, int(booking_num), new_day, int(new_time)) == 0:
-            print("Successfully updated booking %s.\n" % (booking_num))
+            # Get new day and time from user, could be None
+            new_day = input("New day in YYYY-MM-DD format: \n")
+            new_time = input("New start hour of booking, from 0 - 23: \n")
+
+            # Update booking based on inputs
+            if update_booking(cxn, int(booking_num), new_day, int(new_time)) == 0:
+                print("Successfully updated booking %s.\n" % (booking_num))
+            else:
+                print("Error updating booking %s.\n" % (booking_num))
         else:
-            print("Error updating booking %s.\n" % (booking_num))
+            print("You don't have any bookings yet!\n")
+
     # Create booking
     elif menu_item == '3':
         # Tell user what things they can select
-        print("Please provide answers to the following booking criteria: room capacity, ADA compliancy, desired starting hour of reservation, desired date of reservation, projector, and if this booking is associated with a club\n")
+        print("Please provide answers to the following booking criteria: room capacity, ADA compliancy, desired starting hour of reservation, desired date of reservation, projector, if this booking is associated with a club, and desired campus.\n")
         
         capacity = input("Capacity: \n")
         ada_compliant = input("Do you want an ADA compliant room? \n")
@@ -381,62 +408,76 @@ while(global_flag):
         day = input("Date, in YYYY-MM-DD format: \n")
         projector = input("Projector? \n")
         club_affiliation = input("Is this booking associated with a club? \n")
+        campus = input("Campus of desired room:\n")
 
-        # create list of arguments, with NUID as the first
-        args = [int(nuid), int(capacity), yn_to_bool(ada_compliant), int(start_hr), day, yn_to_bool(projector), yn_to_bool(club_affiliation)]
+        # create list of arguments
+        args = (int(capacity), yn_to_bool(ada_compliant), int(start_hr), day, yn_to_bool(projector), yn_to_bool(club_affiliation), campus)
         
         # find rooms that match entered criteria
         compatible_options = find_rooms_with_criteria(cxn, args)
 
-        # Show user available options
-        print("Available options: \n")
-        print_bookings(compatible_options)
+        if len(compatible_options) != 0:
+            # Show user available options
+            print("Available options: \n")
+            print_bookings(compatible_options)
 
-        # Prompt user to select room number, building name, start hour and date
-        print("Please provide the following criteria to create a booking based on the available options shown above: room number, building name, and club to associate with the booking\n")
+            # Prompt user to select room number, building name, start hour and date
+            print("Please provide the following criteria to create a booking based on the available options shown above: room number, building name, and club to associate with the booking\n")
 
-        room_num = input("Room number: \n")
-        building_name = input("Building name: \n")
-        club_name = input("Club name: \n")
+            room_num = input("Room number: \n")
+            building_name = input("Building name: \n")
+            club_name = input("Club name: \n")
 
-        # create list of args for create_booking DB procedure
-        args_c = [int(nuid), int(room_num), building_name, int(start_hr), day, club_name]
+            # create list of args for create_booking DB procedure
+            args_c = (int(nuid), int(room_num), building_name, int(start_hr), day, club_name)
 
-        # actually create booking
-        if create_booking(cxn, args_c) == 0:
-            print("Successfully created booking!\n")
+            # actually create booking
+            if create_booking(cxn, args_c) == 0:
+                print("Successfully created booking!\n")
+            else:
+                print("Error in creating booking.\n")
         else:
-            print("Error in creating booking.\n")
+            print("No results for entered criteria found.\n")
+
     # Delete booking
     elif menu_item == '4':
         # Show user their bookings
-        print("Your bookings: \n")
         bookings = view_bookings(cxn)
-        print_bookings(bookings)
 
-        # Ask user for booking num to delete
-        b_num = input("Confirm booking number to delete: \n")
+        if len(bookings) != 0:
+            print("Your bookings: \n")
+            print_bookings(bookings)
 
-        # Actually delete booking
-        if delete_booking(cxn, int(b_num)) == 0:
-            print("Booking %s was successfully deleted!\n" % (b_num))
+            # Ask user for booking num to delete
+            b_num = input("Confirm booking number to delete: \n")
+
+            # Actually delete booking
+            if delete_booking(cxn, int(b_num)) == 0:
+                print("Booking %s was successfully deleted!\n" % (b_num))
+            else:
+                print("Error in deleting booking %s.\n" % (b_num))
         else:
-            print("Error in deleting booking %s.\n" % (b_num))
+            print("You don't have any bookings yet!\n")
+
     # Sign into booking
     elif menu_item == '5':
         # Show user their bookings
         print("Your bookings: \n")
         bookings = view_bookings(cxn)
-        print_bookings(bookings)
 
-        # Ask user for booking num
-        b_num = input("Confirm booking number to check into: \n")
+        if len(bookings) != 0:
+            print_bookings(bookings)
 
-        # check into room
-        if sign_into_booking(cxn, int(b_num)) == 0:
-            print("Successfully signed into booking %s.\n" % (b_num))
+            # Ask user for booking num
+            b_num = input("Confirm booking number to check into: \n")
+
+            # check into room
+            if sign_into_booking(cxn, int(b_num)) == 0:
+                print("Successfully signed into booking %s.\n" % (b_num))
+            else:
+                print("Error signing into booking %s.\n" % (b_num))
         else:
-            print("Error signing into booking %s.\n" % (b_num))
+            print("You don't have any bookings yet!\n")
 
     # add club association to user
     elif menu_item == '6':
@@ -451,6 +492,7 @@ while(global_flag):
     elif menu_item == '7':
         # close db connection
         sign_out(cxn)
+        print("Signing out...\n")
         global_flag = False
     # default if wrong input?
     else:
