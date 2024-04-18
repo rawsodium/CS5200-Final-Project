@@ -1,6 +1,6 @@
 #!usr/bin/env python
 import pymysql
-import datetime
+import getpass as gp
 
 # variables for state management
 nuid = -1
@@ -11,7 +11,7 @@ validated_flag = False
 # CRUD functions, and various other helper functions
 
 # Utility function to check that an UPDATE, INSERT or DELETE operation was successful
-# Returns True if the procedure update the rows needed, False otherwise
+# Returns True if the procedure updates the rows needed, False otherwise
 def check_rows_affected(cur) -> bool:
     affected_rows = cur.rowcount
     return affected_rows > 0
@@ -51,8 +51,14 @@ def add_club_officer(cxn, nuid: int, club_name: str) -> int:
     try:
         # create cursor
         cur = cxn.cursor()
+
         # call DB procedure add_club_officer
-        cur.callproc('add_club_officer', (nuid, club_name))
+        try:
+            cur.callproc('add_club_officer', (nuid, club_name))
+        except:
+            # because apparently, you can't add a new user and then add a club to them within the same session...
+            print("Cannot add club association to newly registered user.\n")
+            cxn.rollback()
 
         # we check rows affected
         if check_rows_affected(cur):
@@ -288,8 +294,9 @@ def print_menu() -> None:
 # Given a list of a user's bookings, prints them out for the user to see
 def print_user_bookings(records: list) -> None:
     for row in records:
-        date_string = row["date"].strftime('%d/%m/%Y')
-        print('Booking ID:', str(row["booking_id"]), '\n', row["building_name"], 'Room', str(row["room_number"]), 'starting at', str(row["start_hour"]), 'on', date_string, 'for club', str(row["organization_name"]))
+        date_string = row["date"].strftime('%m/%d/%Y')
+        time_string = str(row["start_hour"]) + ':00'
+        print('Booking ID:', str(row["booking_id"]), '\n', row["building_name"], 'Room', str(row["room_number"]), 'starting at', time_string, 'on', date_string, 'for club', str(row["organization_name"]))
 
 
 # Given a list of available rooms, prints them out for the user
@@ -308,7 +315,7 @@ def print_available_timeslots(records: list) -> None:
 # Main loop:
 # Prompt connection to DB
 username = input("Enter DB username: \n")
-password = input("Enter DB password: \n")
+password = gp.getpass("Enter DB password: \n")
 
 while(not_connected_to_db):
     try:
@@ -325,7 +332,7 @@ while(not_connected_to_db):
         print('Error: %d: %s' % (e.args[0], e.args[1]))
         print("Credentials incorrect. Please try again.\n")
         username = input("Enter username for DB connection: \n")
-        password = input("Enter password for DB connection: \n")
+        password = gp.getpass("Enter DB password: \n")
         continue
 
 
@@ -359,6 +366,7 @@ while(global_flag):
     # Successfully validated with NUID, so we can print menu
     print("------------------------\n")
     print_menu()
+    print("------------------------\n")
     menu_item = input("Select the number of the operation you want to do: \n")
 
     # View bookings
@@ -501,7 +509,7 @@ while(global_flag):
         sign_out(cxn)
         print("Signing out...\n")
         global_flag = False
-    # default if wrong input?
+    # default if wrong input
     else:
         print("Invalid operation number, please re-enter.\n")
     
