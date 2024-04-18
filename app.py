@@ -98,13 +98,18 @@ def validate_booking_num(cxn, booking_num: int) -> bool:
         # call DB procedure to check if booking num in user's list of bookings
         cur.callproc('validate_booking_num', [booking_num])
         cxn.commit()
-        validated_rows = cur.fetchall()
+        #validated_rows = cur.fetchall()
+        affected_rows = cur.rowcount
+        #print("returned rows from validate booking num")
+        #for row in validated_rows:
+        #    print(row)
         cur.close()
     except pymysql.err.OperationalError as e:
         print('Error: %d: %s' % (e.args[0], e.args[1]))
 
     # If we return no rows, exit the function and we'll handle the error in the main app loop
-    return len(validated_rows) > 0
+    #return len(validated_rows) > 0
+    return affected_rows > 0
     
 
 # Returns a list of the bookings associated with their NUID that they signed in with
@@ -129,7 +134,7 @@ def display_other_bookings(cxn, booking_num: int) -> list:
         # create cursor
         cur = cxn.cursor()
         # call DB procedure display_other_times
-        cur.callproc('display_other_times', (booking_num))
+        cur.callproc('display_other_times', [booking_num])
         returned_rows = cur.fetchall()
         cur.close()
     except pymysql.err.OperationalError as e:
@@ -150,7 +155,7 @@ def update_booking(cxn, booking_num: int, date: str, timeslot: int) -> int:
         # call DB procedure to update booking based on parameters
         if date is None:
             # we're only updating the timeslot, same date
-            cur.callproc('update_booking', [timeslot])
+            cur.callproc('update_booking', [booking_num, date, timeslot])
 
             # we check affected row counts to make sure update worked
             if check_rows_affected(cur):
@@ -163,7 +168,7 @@ def update_booking(cxn, booking_num: int, date: str, timeslot: int) -> int:
                 return -1
         elif timeslot is None:
             # we're only updating the date, same timeslot
-            cur.callproc('update_booking', [date])
+            cur.callproc('update_booking', [booking_num, date, timeslot])
             
             if check_rows_affected(cur):
                 # commit change
@@ -175,9 +180,10 @@ def update_booking(cxn, booking_num: int, date: str, timeslot: int) -> int:
                 return -1
         else:
             # we are updating both
-            cur.callproc('update_booking', [timeslot, date])
+            cur.callproc('update_booking', [booking_num, date, timeslot])
 
             if check_rows_affected(cur):
+                cxn.commit()
                 cur.close()
                 return 0
             else:
@@ -261,7 +267,7 @@ def sign_into_booking(cxn, booking_num: int) -> int:
             return -1
 
         # call DB procedure check_into_room
-        cur.callproc('check_into_room', [booking_num])
+        cur.callproc('check_into_room', [booking_num, nuid])
 
         if check_rows_affected(cur):
             # commit change
@@ -378,12 +384,12 @@ while(global_flag):
             booking_num = input("Select booking number to update: \n")
 
             # show user available timeslots for that room
-            if validate_booking_num(cxn, int(booking_num)) != 0:
+            if validate_booking_num(cxn, int(booking_num)) == 0:
                 print("Error: Could not validate booking num.\n")
                 break
 
             # call display_other_times
-            other_available_slots = display_other_bookings(int(booking_num))
+            other_available_slots = display_other_bookings(cxn, int(booking_num))
             print_bookings(other_available_slots)
 
             # Get new day and time from user, could be None
