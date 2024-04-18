@@ -30,7 +30,11 @@ def create_user(cxn, nuid: int, name: str) -> int:
         # create cursor
         cur = cxn.cursor()
         # call DB procedure create_user
-        cur.callproc('create_user', [name, nuid])
+        try:
+            cur.callproc('create_user', [name, nuid])
+        except:
+            print("Error creating user. Please try again.\n")
+            cxn.rollback()
 
         # we check rows affected to make sure insert worked (or not)
         if check_rows_affected(cur):
@@ -58,7 +62,7 @@ def add_club_officer(cxn, nuid: int, club_name: str) -> int:
             cur.callproc('add_club_officer', [nuid, club_name])
         except:
             # because apparently, you can't add a new user and then add a club to them within the same session...
-            print("Cannot add club association to newly registered user.\n")
+            print("Error adding club association. Please try again.\n")
             cxn.rollback()
 
         # we check rows affected
@@ -150,7 +154,11 @@ def update_booking(cxn, booking_num: int, date: str, timeslot: int) -> int:
         # call DB procedure to update booking based on parameters
         if date is None:
             # we're only updating the timeslot, same date
-            cur.callproc('update_booking', [booking_num, date, timeslot])
+            try:
+                cur.callproc('update_booking', [booking_num, date, timeslot])
+            except:
+                print("Error updating. Please try again.\n")
+                cxn.rollback()
 
             # we check affected row counts to make sure update worked
             if check_rows_affected(cur):
@@ -163,7 +171,11 @@ def update_booking(cxn, booking_num: int, date: str, timeslot: int) -> int:
                 return -1
         elif timeslot is None:
             # we're only updating the date, same timeslot
-            cur.callproc('update_booking', [booking_num, date, timeslot])
+            try:
+                cur.callproc('update_booking', [booking_num, date, timeslot])
+            except:
+                print("Error updating. Please try again.\n")
+                cxn.rollback()
             
             if check_rows_affected(cur):
                 # commit change
@@ -175,7 +187,11 @@ def update_booking(cxn, booking_num: int, date: str, timeslot: int) -> int:
                 return -1
         else:
             # we are updating both
-            cur.callproc('update_booking', [booking_num, date, timeslot])
+            try:
+                cur.callproc('update_booking', [booking_num, date, timeslot])
+            except:
+                print("Error updating. Please try again.\n")
+                cxn.rollback()
 
             if check_rows_affected(cur):
                 cxn.commit()
@@ -211,7 +227,11 @@ def create_booking(cxn, args: list) -> int:
         # create cursor
         cur = cxn.cursor()
         # call DB procedure create_booking
-        cur.callproc('create_booking', args)
+        try:
+            cur.callproc('create_booking', args)
+        except:
+            print("Error in creating booking. Please try again.\n")
+            cxn.rollback()
 
         if check_rows_affected(cur):
             # commit change
@@ -236,7 +256,11 @@ def delete_booking(cxn, booking_num: int) -> int:
         if validate_booking_num(cxn, booking_num) is False:
             return -1
         # call DB procedure delete_booking
-        cur.callproc('delete_booking', [booking_num])
+        try:
+            cur.callproc('delete_booking', [booking_num])
+        except:
+            print("Error in deleting booking. Please try again.\n")
+            cxn.rollback()
 
         if check_rows_affected(cur):
             # commit change
@@ -262,7 +286,11 @@ def sign_into_booking(cxn, booking_num: int) -> int:
             return -1
 
         # call DB procedure check_into_room
-        cur.callproc('check_into_room', [booking_num, nuid])
+        try:
+            cur.callproc('check_into_room', [booking_num, nuid])
+        except:
+            print("Error signing into booking. Please try again.\n")
+            cxn.rollback()
 
         if check_rows_affected(cur):
             # commit change
