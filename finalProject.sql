@@ -142,25 +142,6 @@ END $$
 DELIMITER ;
 
 -- does_booking_exist: Checks if a booking has been made on a certain day and time for a given room
-DELIMITER $$
-CREATE PROCEDURE display_other_times(booking_num INT)
-BEGIN
-    -- get the booking's room number and building name
-    DECLARE room_num INT;
-    DECLARE building_name VARCHAR(64);
-    SELECT room_number, building_name INTO room_num, building_name FROM bookings WHERE booking_id = booking_num;
-    
-    -- get all timeslots for the room that are not booked
-    SELECT * FROM timeslots AS available_timeslots
-        WHERE NOT EXISTS (SELECT * FROM bookings 
-                            WHERE bookings.room_number = available_timeslots.room_number 
-                                AND bookings.building_name = available_timeslots.building_name 
-                                    AND bookings.start_hour = available_timeslots.start_hour
-                                        AND bookings.date = available_timeslots.date);
-END $$
-DELIMITER ;
-
--- does_booking_exist: Checks if a booking has been made on a certain day and time for a given room
 -- usage: returns TRUE if a booking for the room (name and number) for a given data and time exists, FALSE otherwise
 DROP FUNCTION IF EXISTS does_booking_exist;
 DELIMITER $$

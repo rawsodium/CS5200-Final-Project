@@ -7,6 +7,7 @@ nuid = -1
 global_flag = True
 not_connected_to_db = True
 validated_flag = False
+counter = 0
 
 # CRUD functions, and various other helper functions
 
@@ -29,7 +30,7 @@ def create_user(cxn, nuid: int, name: str) -> int:
         # create cursor
         cur = cxn.cursor()
         # call DB procedure create_user
-        cur.callproc('create_user', (name, nuid))
+        cur.callproc('create_user', [name, nuid])
 
         # we check rows affected to make sure insert worked (or not)
         if check_rows_affected(cur):
@@ -54,7 +55,7 @@ def add_club_officer(cxn, nuid: int, club_name: str) -> int:
 
         # call DB procedure add_club_officer
         try:
-            cur.callproc('add_club_officer', (nuid, club_name))
+            cur.callproc('add_club_officer', [nuid, club_name])
         except:
             # because apparently, you can't add a new user and then add a club to them within the same session...
             print("Cannot add club association to newly registered user.\n")
@@ -325,7 +326,6 @@ while(not_connected_to_db):
                             database='final_project',
                             charset='utf8mb4',
                             cursorclass=pymysql.cursors.DictCursor)
-        print('Successfully connected to MySQL!\n')
         not_connected_to_db = False
         break
     except pymysql.err.OperationalError as e:
@@ -339,8 +339,11 @@ while(not_connected_to_db):
 # Connect to DB
 while(global_flag):
     while(not validated_flag):
+        if counter >= 1:
+            choice = input("Choose 2 to confirm NUID.\n")
+        else:
         # prompt user to either a) register or b) sign in
-        choice = input("Would you like to register an NUID (1), or sign in with an existing NUID (2)?\n")
+            choice = input("Would you like to register an NUID (1), or sign in with an existing NUID (2)?\n")
 
         # register
         if choice == '1':
@@ -349,7 +352,22 @@ while(global_flag):
 
             if create_user(cxn, int(user_nuid), user_name) == 0:
                 print("User was successfully added.\n")
-                validated_flag = True
+                cxn.close()
+
+                # not connected to DB anymore
+                not_connected_to_db = True
+                # use old creds to re-open connection, hopefully will see new user
+                try:
+                    cxn = pymysql.connect(host='localhost', 
+                        user=username,
+                        password=password,
+                        database='final_project',
+                        charset='utf8mb4',
+                        cursorclass=pymysql.cursors.DictCursor)
+                    not_connected_to_db = True
+                    counter += 1
+                except pymysql.err.OperationalError as e:
+                    print('Error: %d: %s' % (e.args[0], e.args[1]))
             else:
                 print("Error: could not register.\n")
                 exit(1)
