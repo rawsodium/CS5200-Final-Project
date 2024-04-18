@@ -33,12 +33,12 @@ CREATE TABLE `bookings` (
   `booking_id` int NOT NULL AUTO_INCREMENT,
   `organization_name` varchar(64) DEFAULT NULL,
   PRIMARY KEY (`booking_id`),
+  UNIQUE KEY `room_number` (`room_number`,`building_name`,`start_hour`,`date`),
   KEY `nuid` (`nuid`),
   KEY `organization_name` (`organization_name`),
-  KEY `room_number` (`room_number`,`building_name`,`start_hour`),
-  CONSTRAINT `bookings_ibfk_1` FOREIGN KEY (`nuid`) REFERENCES `students` (`nuid`),
-  CONSTRAINT `bookings_ibfk_2` FOREIGN KEY (`organization_name`) REFERENCES `organizations` (`name`),
-  CONSTRAINT `bookings_ibfk_3` FOREIGN KEY (`room_number`, `building_name`, `start_hour`) REFERENCES `timeslots` (`room_number`, `building_name`, `start_hour`)
+  CONSTRAINT `bookings_ibfk_1` FOREIGN KEY (`nuid`) REFERENCES `students` (`nuid`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `bookings_ibfk_2` FOREIGN KEY (`organization_name`) REFERENCES `organizations` (`name`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `bookings_ibfk_3` FOREIGN KEY (`room_number`, `building_name`, `start_hour`) REFERENCES `timeslots` (`room_number`, `building_name`, `start_hour`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -68,7 +68,7 @@ CREATE TABLE `buildings` (
   `campus` varchar(64) DEFAULT NULL,
   PRIMARY KEY (`name`),
   KEY `campus` (`campus`),
-  CONSTRAINT `buildings_ibfk_1` FOREIGN KEY (`campus`) REFERENCES `campuses` (`name`)
+  CONSTRAINT `buildings_ibfk_1` FOREIGN KEY (`campus`) REFERENCES `campuses` (`name`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -91,7 +91,7 @@ DROP TABLE IF EXISTS `campuses`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `campuses` (
   `name` varchar(64) NOT NULL,
-  `grad_only` tinyint(1) DEFAULT NULL,
+  `grad_only` tinyint DEFAULT NULL,
   `student_population` int DEFAULT NULL,
   PRIMARY KEY (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -119,8 +119,8 @@ CREATE TABLE `club_officer` (
   `organization_name` varchar(64) NOT NULL,
   PRIMARY KEY (`nuid`,`organization_name`),
   KEY `organization_name` (`organization_name`),
-  CONSTRAINT `club_officer_ibfk_1` FOREIGN KEY (`nuid`) REFERENCES `students` (`nuid`),
-  CONSTRAINT `club_officer_ibfk_2` FOREIGN KEY (`organization_name`) REFERENCES `organizations` (`name`)
+  CONSTRAINT `club_officer_ibfk_1` FOREIGN KEY (`nuid`) REFERENCES `students` (`nuid`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `club_officer_ibfk_2` FOREIGN KEY (`organization_name`) REFERENCES `organizations` (`name`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -130,6 +130,7 @@ CREATE TABLE `club_officer` (
 
 LOCK TABLES `club_officer` WRITE;
 /*!40000 ALTER TABLE `club_officer` DISABLE KEYS */;
+INSERT INTO `club_officer` VALUES (1,'Fencing');
 /*!40000 ALTER TABLE `club_officer` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -173,7 +174,7 @@ CREATE TABLE `rooms` (
   `building` varchar(64) NOT NULL,
   PRIMARY KEY (`room_number`,`building`),
   KEY `building` (`building`),
-  CONSTRAINT `rooms_ibfk_1` FOREIGN KEY (`building`) REFERENCES `buildings` (`name`)
+  CONSTRAINT `rooms_ibfk_1` FOREIGN KEY (`building`) REFERENCES `buildings` (`name`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -233,6 +234,7 @@ CREATE TABLE `students` (
 
 LOCK TABLES `students` WRITE;
 /*!40000 ALTER TABLE `students` DISABLE KEYS */;
+INSERT INTO `students` VALUES (1,'Tim');
 /*!40000 ALTER TABLE `students` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -249,8 +251,8 @@ CREATE TABLE `timeslots` (
   `start_hour` int NOT NULL,
   PRIMARY KEY (`room_number`,`building_name`,`start_hour`),
   KEY `building_name` (`building_name`),
-  CONSTRAINT `timeslots_ibfk_1` FOREIGN KEY (`room_number`) REFERENCES `rooms` (`room_number`),
-  CONSTRAINT `timeslots_ibfk_2` FOREIGN KEY (`building_name`) REFERENCES `rooms` (`building`),
+  CONSTRAINT `timeslots_ibfk_1` FOREIGN KEY (`room_number`) REFERENCES `rooms` (`room_number`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `timeslots_ibfk_2` FOREIGN KEY (`building_name`) REFERENCES `rooms` (`building`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `valid_hour` CHECK (((`start_hour` >= 0) and (`start_hour` < 24)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -413,7 +415,7 @@ BEGIN
     SELECT MAX(booking_id) FROM bookings INTO last_booking_id;
         
 	-- you would think that creating a new tuple would autoincrement the id, but who even knows - hence why i used the last inserted id as a reference point.
-	INSERT INTO bookings(nuid, room_number, building_name, start_hour, date, organization_name)
+	INSERT INTO bookings(nuid, room_number, building_name, start_hour, date, booking_id, organization_name)
 		VALUES(user_nuid, r_num, b_name, s_hour, day, last_booking_id + 1, org_name);
 	IF duplicate_entry_for_key = TRUE THEN
 		SELECT 'Row was not inserted - duplicate key encountered.'
@@ -631,4 +633,4 @@ DELIMITER ;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2024-04-17 20:43:23
+-- Dump completed on 2024-04-17 21:45:38
