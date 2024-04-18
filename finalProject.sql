@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS buildings(
     zipcode int,
     num_floors int,
     campus VARCHAR(64),
-    FOREIGN KEY (campus) REFERENCES campuses(name));
+    FOREIGN KEY (campus) REFERENCES campuses(name) ON DELETE CASCADE ON UPDATE CASCADE);
     
 CREATE TABLE IF NOT EXISTS rooms(
 	room_number int,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS rooms(
     projector boolean,
     club_only boolean,
     building  VARCHAR(64),
-    FOREIGN KEY (building) REFERENCES buildings(name),
+    FOREIGN KEY (building) REFERENCES buildings(name) ON DELETE CASCADE ON UPDATE CASCADE,
     PRIMARY KEY (room_number, building));
 
 -- starts empty
@@ -44,8 +44,8 @@ CREATE TABLE IF NOT EXISTS timeslots(
 	room_number int,
     building_name  VARCHAR(64),
     start_hour int,
-	FOREIGN KEY (room_number) REFERENCES rooms(room_number),
-    FOREIGN KEY (building_name) REFERENCES rooms(building),
+	FOREIGN KEY (room_number) REFERENCES rooms(room_number) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (building_name) REFERENCES rooms(building) ON DELETE CASCADE ON UPDATE CASCADE,
     PRIMARY KEY (room_number, building_name, start_hour),
     CONSTRAINT valid_hour CHECK (start_hour >= 0 AND start_hour < 24));
 
@@ -53,8 +53,8 @@ CREATE TABLE IF NOT EXISTS timeslots(
 CREATE TABLE IF NOT EXISTS club_officer(
 	nuid int,
     organization_name VARCHAR(64),
-    FOREIGN KEY (nuid) REFERENCES students(nuid),
-    FOREIGN KEY (organization_name) REFERENCES organizations(name),
+    FOREIGN KEY (nuid) REFERENCES students(nuid) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (organization_name) REFERENCES organizations(name) ON DELETE CASCADE ON UPDATE CASCADE,
     PRIMARY KEY (nuid, organization_name));
     
 -- DROP TABLE bookings;
@@ -67,9 +67,12 @@ CREATE TABLE IF NOT EXISTS bookings(
     date date,
     booking_id int AUTO_INCREMENT PRIMARY KEY,
     organization_name VARCHAR(64),
-    FOREIGN KEY (nuid) REFERENCES students(nuid),
-    FOREIGN KEY (organization_name) REFERENCES organizations(name),
-    FOREIGN KEY (room_number, building_name, start_hour) REFERENCES timeslots(room_number, building_name, start_hour));
+    UNIQUE (room_number, building_name, start_hour, date),
+    FOREIGN KEY (nuid) REFERENCES students(nuid) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (organization_name) REFERENCES organizations(name) ON DELETE CASCADE ON UPDATE CASCADE,
+    FOREIGN KEY (room_number, building_name, start_hour) 
+		REFERENCES timeslots(room_number, building_name, start_hour) 
+			ON DELETE CASCADE ON UPDATE CASCADE);
 
 -- starts empty
 -- DROP TABLE signs_in;
@@ -186,6 +189,7 @@ BEGIN
 										AND NOT does_booking_exist(day, time, rooms.building, rooms.room_number);
 END $$
 DELIMITER ;
+
 -- CALL find_room_with_criteria(25, 1, 13, "2012-12-12", 1, 0, "Boston");
 -- is_valid_club: Checks if the given club organization name is registered in the database, otherwise a user should not be able to book a room for a club that doesn't exist
 -- usage: returns TRUE if the club is valid, FALSE otherwise
@@ -234,7 +238,7 @@ BEGIN
     SELECT MAX(booking_id) FROM bookings INTO last_booking_id;
         
 	-- you would think that creating a new tuple would autoincrement the id, but who even knows - hence why i used the last inserted id as a reference point.
-	INSERT INTO bookings(nuid, room_number, building_name, start_hour, date, organization_name)
+	INSERT INTO bookings(nuid, room_number, building_name, start_hour, date, booking_id, organization_name)
 		VALUES(user_nuid, r_num, b_name, s_hour, day, last_booking_id + 1, org_name);
 	IF duplicate_entry_for_key = TRUE THEN
 		SELECT 'Row was not inserted - duplicate key encountered.'
@@ -245,6 +249,9 @@ BEGIN
 	END IF;
 END $$
 DELIMITER ;
+
+-- CALL create_booking(1, 101, "Richards Hall", 13, "2012-12-12", NULL);
+-- SELECT * FROM bookings;
 
 -- delete_booking: Given a booking number, deletes it from the bookings table if it has not been signed into yet
 DROP PROCEDURE IF EXISTS delete_booking;
@@ -288,8 +295,6 @@ DELIMITER ;
 
 -- create_user: given a name and nuid, create a new user
 DROP PROCEDURE IF EXISTS create_user;
--- create_user: given a name and nuid, create a new user
-DROP PROCEDURE IF EXISTS create_user;
 DELIMITER $$
 CREATE PROCEDURE create_user(user_name VARCHAR(128), user_nuid INT)
 BEGIN
@@ -299,7 +304,8 @@ BEGIN
     END IF;
 END $$
 DELIMITER ;
-
+-- CALL create_user("Tim", 1);
+-- SELECT * FROM students;
 -- add_club_officer: given a user's nuid and a club name, add the user as an officer of the club
 -- we only want to add the user if they are not already an officer of the club
 DROP PROCEDURE IF EXISTS add_club_officer;
@@ -314,3 +320,5 @@ BEGIN
 	END IF;
 END $$
 DELIMITER ;
+-- CALL add_club_officer(1, "Fencing");
+-- SELECT * FROM club_officer;
