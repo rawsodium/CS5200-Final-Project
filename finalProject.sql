@@ -172,32 +172,21 @@ DELIMITER ;
 -- rooms that satisfy the user's wants
 DROP PROCEDURE IF EXISTS find_room_with_criteria;
 DELIMITER $$
-CREATE PROCEDURE find_room_with_criteria(cap INT, ada BOOL, time INT, day DATE, projector BOOL, club BOOL, campus VARCHAR(64))
+CREATE PROCEDURE find_room_with_criteria(cap INT, p_ada BOOL, time INT, day DATE, p_projector BOOL, club BOOL, p_campus VARCHAR(64))
 BEGIN
-	-- first, get compliant rooms, including campus
-	SELECT * FROM rooms AS compliant_rooms
-        WHERE capacity >= cap 
-            AND ada = ada 
-                AND projector = projector 
-                    AND club_only = club 
-                        AND building IN (SELECT name FROM buildings WHERE campus = campus); 
-	
-    -- then, get compliant timeslots
-    SELECT * FROM timeslots AS compliant_timeslots
-        WHERE start_hour = time;
-    
-    -- join compliant rooms to compliant timeslots
-    SELECT * FROM compliant_timeslots AS joined_rooms_timeslots
-        JOIN compliant_rooms
-            ON compliant_timeslots.room_number = compliant_rooms.room_number;
-    
-    -- somehow: check if the room/timeslot has already been booked with does_booking_exist
-    -- if yes, then remove those records from the results we return to the user
-    SELECT * FROM joined_rooms_timeslots AS available_rooms_timeslots
-        WHERE NOT does_booking_exist(day, time, joined_rooms_timeslots.building, joined_rooms_timeslots.room_number);
+    SELECT rooms.building, rooms.room_number, rooms.capacity FROM rooms
+		JOIN timeslots
+			ON rooms.room_number = timeslots.room_number AND rooms.building = timeslots.building_name
+				WHERE rooms.capacity >= cap
+					AND rooms.ada = p_ada
+						AND rooms.projector = p_projector
+							AND rooms.club_only = club
+								AND timeslots.start_hour = time
+									AND rooms.building IN (SELECT name FROM buildings WHERE buildings.campus = p_campus)
+										AND NOT does_booking_exist(day, time, rooms.building, rooms.room_number);
 END $$
 DELIMITER ;
-
+-- CALL find_room_with_criteria(25, 1, 13, "2012-12-12", 1, 0, "Boston");
 -- is_valid_club: Checks if the given club organization name is registered in the database, otherwise a user should not be able to book a room for a club that doesn't exist
 -- usage: returns TRUE if the club is valid, FALSE otherwise
 DROP FUNCTION IF EXISTS is_valid_club;
@@ -247,7 +236,6 @@ BEGIN
 	-- you would think that creating a new tuple would autoincrement the id, but who even knows - hence why i used the last inserted id as a reference point.
 	INSERT INTO bookings(nuid, room_number, building_name, start_hour, date, organization_name)
 		VALUES(user_nuid, r_num, b_name, s_hour, day, last_booking_id + 1, org_name);
-            
 	IF duplicate_entry_for_key = TRUE THEN
 		SELECT 'Row was not inserted - duplicate key encountered.'
 			AS message;
@@ -300,6 +288,8 @@ DELIMITER ;
 
 -- create_user: given a name and nuid, create a new user
 DROP PROCEDURE IF EXISTS create_user;
+-- create_user: given a name and nuid, create a new user
+DROP PROCEDURE IF EXISTS create_user;
 DELIMITER $$
 CREATE PROCEDURE create_user(user_name VARCHAR(128), user_nuid INT)
 BEGIN
@@ -316,7 +306,11 @@ DROP PROCEDURE IF EXISTS add_club_officer;
 DELIMITER $$
 CREATE PROCEDURE add_club_officer(user_nuid INT, club_name VARCHAR(64))
 BEGIN
-    INSERT INTO club_officer(nuid, organization_name)
-        VALUES(user_nuid, club_name);
+	IF NOT EXISTS (SELECT * FROM club_officer 
+						WHERE club_officer.nuid = user_nuid 
+							AND club_officer.organization_name = club_name) THEN
+		INSERT INTO club_officer(nuid, organization_name)
+			VALUES(user_nuid, club_name);
+	END IF;
 END $$
 DELIMITER ;
