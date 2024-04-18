@@ -1,12 +1,6 @@
 #!usr/bin/env python
 import pymysql
-
-# TODO: Ask for user to re-enter credentials if they mess up
-# TODO: Clean up code style
-# TODO: Error handling from MySQL procedures (or more informative error handling)
-# TODO: Input sanitization/validation for various instances of user input!
-# TODO: Figure out what to do if student doesn't exist in DB
-# TODO: Figure out how to reprompt user for invalid inputs/we just error and return to main menu
+import datetime
 
 # variables for state management
 nuid = -1
@@ -26,6 +20,7 @@ def check_rows_affected(cur) -> bool:
 # Convert yes/no responses to boolean values
 def yn_to_bool(choice: str) -> bool:
     return choice.lower() == 'yes'
+
 
 # Creates an entry in the student table
 # Returns 0 if the student was successfully added, -1 otherwise
@@ -67,6 +62,7 @@ def add_club_officer(cxn, nuid: int, club_name: str) -> int:
             return 0
         else:
             print("Error in updating club association.\n")
+            return -1
     except pymysql.err.OperationalError as e:
         print('Error: %d: %s' % (e.args[0], e.args[1]))
         return -1
@@ -91,24 +87,16 @@ def validate_nuid(cxn, nuid: int) -> bool:
 # Validates a user's entered booking number
 # Returns True if the booking exists for the given student, False otherwise
 def validate_booking_num(cxn, booking_num: int) -> bool:
-    validated_rows = []
     try:
         # create cursor
         cur = cxn.cursor()
         # call DB procedure to check if booking num in user's list of bookings
         cur.callproc('validate_booking_num', [booking_num])
         cxn.commit()
-        #validated_rows = cur.fetchall()
         affected_rows = cur.rowcount
-        #print("returned rows from validate booking num")
-        #for row in validated_rows:
-        #    print(row)
         cur.close()
     except pymysql.err.OperationalError as e:
         print('Error: %d: %s' % (e.args[0], e.args[1]))
-
-    # If we return no rows, exit the function and we'll handle the error in the main app loop
-    #return len(validated_rows) > 0
     return affected_rows > 0
     
 
@@ -135,7 +123,7 @@ def display_other_bookings(cxn, booking_num: int) -> list:
         cur = cxn.cursor()
         # call DB procedure display_other_times
         cur.callproc('display_other_times', [booking_num])
-        returned_rows = cur.fetchall()
+        returned_rows = cur.fetchmany(size=15)
         cur.close()
     except pymysql.err.OperationalError as e:
         print('Error: %d: %s' % (e.args[0], e.args[1]))
@@ -297,20 +285,27 @@ def print_menu() -> None:
     print("6: Add club association\n")
     print("7: Sign out")
 
-# Given a list of bookings, prints them out for the user to see
-def print_bookings(records: list) -> None:
+# Given a list of a user's bookings, prints them out for the user to see
+def print_user_bookings(records: list) -> None:
     for row in records:
-        print(row)
+        date_string = row["date"].strftime('%d/%m/%Y')
+        print('Booking ID:', str(row["booking_id"]), '\n', row["building_name"], 'Room', str(row["room_number"]), 'starting at', str(row["start_hour"]), 'on', date_string, 'for club', str(row["organization_name"]))
 
 
-# Control flow of main loop:
-# Connect to DB
-# Ask user for NUID -> validate with function -> quit and close on error? or re-prompt like, twice and then exit idk
-# Once NUID validated: print menu
-# User selects a choice, switch statement i guess
-# Once operation finished, return to menu
-# If user selects sign out -> close DB connection
+# Given a list of available rooms, prints them out for the user
+def print_available_rooms(records: list) -> None:
+    for row in records:
+        formatted_string = row["building"] + ' Room ' + str(row["room_number"]) + ', Capacity: ' + str(row["capacity"])
+        print(formatted_string)
 
+# Given a list of available time slots, prints them out for the user
+def print_available_timeslots(records: list) -> None:
+    for row in records:
+        formatted_string = row["building_name"] + ' Room ' + str(row["room_number"]) + ' starting at ' + str(row["start_hour"]) + ':00'
+        print(formatted_string)
+
+
+# Main loop:
 # Prompt connection to DB
 username = input("Enter DB username: \n")
 password = input("Enter DB password: \n")
@@ -359,9 +354,9 @@ while(global_flag):
                 print("Error: could not validate NUID %s.\n" % (nuid))
                 exit(1)
             validated_flag = True
-    
+        print("Signed in successfully.\n")
+
     # Successfully validated with NUID, so we can print menu
-    print("Signed in successfully.\n")
     print("------------------------\n")
     print_menu()
     menu_item = input("Select the number of the operation you want to do: \n")
@@ -369,7 +364,8 @@ while(global_flag):
     # View bookings
     if menu_item == '1':
         bookings = view_bookings(cxn)
-        print_bookings(bookings)
+        print("Your bookings: \n")
+        print_user_bookings(bookings)
 
     # Update booking
     elif menu_item == '2':
@@ -378,7 +374,7 @@ while(global_flag):
         bookings = view_bookings(cxn)
 
         if len(bookings) != 0:
-            print_bookings(bookings)
+            print_user_bookings(bookings)
 
             # Select booking number
             booking_num = input("Select booking number to update: \n")
@@ -390,7 +386,7 @@ while(global_flag):
 
             # call display_other_times
             other_available_slots = display_other_bookings(cxn, int(booking_num))
-            print_bookings(other_available_slots)
+            print_available_timeslots(other_available_slots)
 
             # Get new day and time from user, could be None
             new_day = input("New day in YYYY-MM-DD format: \n")
@@ -426,7 +422,7 @@ while(global_flag):
         if len(compatible_options) != 0:
             # Show user available options
             print("Available options: \n")
-            print_bookings(compatible_options)
+            print_available_rooms(compatible_options)
 
             # Prompt user to select room number, building name, start hour and date
             print("Please provide the following criteria to create a booking based on the available options shown above: room number, building name, and club to associate with the booking\n")
@@ -457,7 +453,7 @@ while(global_flag):
 
         if len(bookings) != 0:
             print("Your bookings: \n")
-            print_bookings(bookings)
+            print_user_bookings(bookings)
 
             # Ask user for booking num to delete
             b_num = input("Confirm booking number to delete: \n")
@@ -477,7 +473,7 @@ while(global_flag):
         bookings = view_bookings(cxn)
 
         if len(bookings) != 0:
-            print_bookings(bookings)
+            print_user_bookings(bookings)
 
             # Ask user for booking num
             b_num = input("Confirm booking number to check into: \n")
